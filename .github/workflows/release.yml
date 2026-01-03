@@ -1,12 +1,7 @@
 name: Cloud Build
 
-"on":
+on:
   workflow_dispatch:
-    inputs:
-      build:
-        description: "Build type (debug/release/both)"
-        required: true
-        default: "release"
 
 jobs:
   build:
@@ -36,7 +31,6 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           KEY_BASE64: ${{ secrets.KEY_BASE64 }}
           SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
-          BUILD: ${{ inputs.build }}
         run: |
           # google-services.json (use secret if provided, else dummy for CI)
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
@@ -66,49 +60,37 @@ jobs:
             echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build."
           fi
 
-          # signing (release only). Use secrets if provided, else generate a temp keystore.
-          if [ "$BUILD" != "debug" ]; then
-            if [ -n "$KEY_BASE64" ] && [ -n "$SIGNING_CONFIG" ]; then
-              printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
-              printf '%s' "$SIGNING_CONFIG" > local.properties
-            else
-              echo "::warning::Release signing secrets not set; generating a temporary keystore for CI build."
-              keytool -genkeypair -v \
-                -keystore app/app.key \
-                -storepass android \
-                -keypass android \
-                -alias androiddebugkey \
-                -keyalg RSA \
-                -keysize 2048 \
-                -validity 10000 \
-                -dname "CN=Android Debug,O=Android,C=US"
-              printf '%s\n' \
-                'storeFile=app/app.key' \
-                'storePassword=android' \
-                'keyAlias=androiddebugkey' \
-                'keyPassword=android' \
-                > local.properties
-            fi
+          # signing (release). Use secrets if provided, else generate a temp keystore.
+          if [ -n "$KEY_BASE64" ] && [ -n "$SIGNING_CONFIG" ]; then
+            printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
+            printf '%s' "$SIGNING_CONFIG" > local.properties
+          else
+            echo "::warning::Release signing secrets not set; generating a temporary keystore for CI build."
+            keytool -genkeypair -v \
+              -keystore app/app.key \
+              -storepass android \
+              -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            printf '%s\n' \
+              'storeFile=app/app.key' \
+              'storePassword=android' \
+              'keyAlias=androiddebugkey' \
+              'keyPassword=android' \
+              > local.properties
           fi
 
       - name: Gradle Build
-        env:
-          BUILD: ${{ inputs.build }}
         run: |
           chmod +x gradlew
-          if [ "$BUILD" = "debug" ]; then
-            ./gradlew assembleDebug
-          elif [ "$BUILD" = "release" ]; then
-            ./gradlew assembleRelease
-          else
-            ./gradlew assembleDebug assembleRelease
-          fi
+          ./gradlew assembleRelease
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: artifacts
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/*.apk
