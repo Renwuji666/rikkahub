@@ -31,8 +31,8 @@ jobs:
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
           else
-            printf '%s\n' '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci","storage_bucket":"rikkahub-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub"}},"api_key":[{"current_key":"DUMMY_KEY"}]}],"configuration_version":"1"}' > app/google-services.json
-            echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build."
+            printf '%s\n' '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci","storage_bucket":"rikkahub-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"api_key":[{"current_key":"DUMMY_KEY"}]}],"configuration_version":"1"}' > app/google-services.json
+            echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build (debug package)."
           fi
 
       - name: Gradle Build (debug arm64)
