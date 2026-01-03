@@ -1,12 +1,22 @@
-name: Release Build
+name: Cloud Build
 
 on:
   workflow_dispatch:
+    inputs:
+      build:
+        description: "Build type"
+        required: true
+        type: choice
+        default: "release"
+        options:
+          - debug
+          - release
+          - both
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,8 +25,8 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Gradle cache
         uses: actions/cache@v4
@@ -26,25 +36,55 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-      - name: Prepare build files
+      - name: Validate secrets
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
+          BUILD: ${{ inputs.build }}
         run: |
-          # 解码base64编码的keystore文件
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          
-          # 写入签名配置到local.properties
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
-          # 写入Google Services配置
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::Missing GOOGLE_SERVICES_JSON secret (required for google-services plugin)."
+            exit 1
+          fi
+          if [ "$BUILD" != "debug" ]; then
+            if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
+              echo "::error::Missing KEY_BASE64 or SIGNING_CONFIG secret for release build."
+              exit 1
+            fi
+          fi
+
+      - name: Prepare build files
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          if [ "$BUILD" != "debug" ]; then
+            printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
+            printf '%s' "$SIGNING_CONFIG" > local.properties
+          fi
 
       - name: Gradle Build
+        env:
+          BUILD: ${{ inputs.build }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          if [ "$BUILD" = "debug" ]; then
+            ./gradlew assembleDebug
+          elif [ "$BUILD" = "release" ]; then
+            ./gradlew assembleRelease
+          else
+            ./gradlew assembleDebug assembleRelease
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: artifacts
-          path: app/build/outputs/apk/release/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
