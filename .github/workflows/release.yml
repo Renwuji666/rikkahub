@@ -36,24 +36,6 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-      - name: Validate secrets
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
-          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
-          BUILD: ${{ inputs.build }}
-        run: |
-          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
-            echo "::error::Missing GOOGLE_SERVICES_JSON secret (required for google-services plugin)."
-            exit 1
-          fi
-          if [ "$BUILD" != "debug" ]; then
-            if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
-              echo "::error::Missing KEY_BASE64 or SIGNING_CONFIG secret for release build."
-              exit 1
-            fi
-          fi
-
       - name: Prepare build files
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -61,10 +43,59 @@ jobs:
           SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
           BUILD: ${{ inputs.build }}
         run: |
-          printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          # google-services.json (use secret if provided, else dummy for CI)
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          else
+            cat > app/google-services.json <<'JSON'
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "rikkahub-ci",
+    "storage_bucket": "rikkahub-ci.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "android_client_info": {
+          "package_name": "me.rerere.rikkahub"
+        }
+      },
+      "api_key": [
+        { "current_key": "DUMMY_KEY" }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}
+JSON
+            echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build."
+          fi
+
+          # signing (release only). Use secrets if provided, else generate a temp keystore.
           if [ "$BUILD" != "debug" ]; then
-            printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
-            printf '%s' "$SIGNING_CONFIG" > local.properties
+            if [ -n "$KEY_BASE64" ] && [ -n "$SIGNING_CONFIG" ]; then
+              printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
+              printf '%s' "$SIGNING_CONFIG" > local.properties
+            else
+              echo "::warning::Release signing secrets not set; generating a temporary keystore for CI build."
+              keytool -genkeypair -v \
+                -keystore app/app.key \
+                -storepass android \
+                -keypass android \
+                -alias androiddebugkey \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+              cat > local.properties <<'EOF'
+storeFile=app/app.key
+storePassword=android
+keyAlias=androiddebugkey
+keyPassword=android
+EOF
+            fi
           fi
 
       - name: Gradle Build
