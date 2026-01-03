@@ -39,9 +39,25 @@ jobs:
           fi
 
           # signing (release). Use secrets if provided, else generate a temp keystore.
-          if [ -n "$KEY_BASE64" ] && [ -n "$SIGNING_CONFIG" ]; then
+          if [ -n "$KEY_BASE64" ] || [ -n "$SIGNING_CONFIG" ]; then
+            if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
+              echo "::error::KEY_BASE64 and SIGNING_CONFIG must be set together."
+              exit 1
+            fi
             printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
-            printf '%s' "$SIGNING_CONFIG" > local.properties
+            STORE_PASSWORD=$(printf '%s' "$SIGNING_CONFIG" | sed -n 's/^storePassword=//p')
+            KEY_ALIAS=$(printf '%s' "$SIGNING_CONFIG" | sed -n 's/^keyAlias=//p')
+            KEY_PASSWORD=$(printf '%s' "$SIGNING_CONFIG" | sed -n 's/^keyPassword=//p')
+            if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+              echo "::error::SIGNING_CONFIG must include storePassword, keyAlias, and keyPassword."
+              exit 1
+            fi
+            printf '%s\n' \
+              'storeFile=app.key' \
+              "storePassword=$STORE_PASSWORD" \
+              "keyAlias=$KEY_ALIAS" \
+              "keyPassword=$KEY_PASSWORD" \
+              > local.properties
           else
             echo "::warning::Release signing secrets not set; generating a temporary keystore for CI build."
             keytool -genkeypair -v \
@@ -54,7 +70,7 @@ jobs:
               -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
             printf '%s\n' \
-              'storeFile=app/app.key' \
+              'storeFile=app.key' \
               'storePassword=android' \
               'keyAlias=androiddebugkey' \
               'keyPassword=android' \
