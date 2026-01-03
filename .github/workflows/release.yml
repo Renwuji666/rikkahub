@@ -47,8 +47,7 @@ jobs:
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
           else
-            cat > app/google-services.json <<'JSON'
-{
+            printf '%s\n' '{
   "project_info": {
     "project_number": "000000000000",
     "project_id": "rikkahub-ci",
@@ -68,8 +67,7 @@ jobs:
     }
   ],
   "configuration_version": "1"
-}
-JSON
+}' > app/google-services.json
             echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build."
           fi
 
@@ -89,12 +87,12 @@ JSON
                 -keysize 2048 \
                 -validity 10000 \
                 -dname "CN=Android Debug,O=Android,C=US"
-              cat > local.properties <<'EOF'
-storeFile=app/app.key
-storePassword=android
-keyAlias=androiddebugkey
-keyPassword=android
-EOF
+              printf '%s\n' \
+                'storeFile=app/app.key' \
+                'storePassword=android' \
+                'keyAlias=androiddebugkey' \
+                'keyPassword=android' \
+                > local.properties
             fi
           fi
 
