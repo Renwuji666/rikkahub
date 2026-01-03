@@ -42,15 +42,15 @@ jobs:
 
       - name: List APK outputs
         run: |
-          echo "== debug dir =="
-          ls -la app/build/outputs/apk/debug || true
-          echo "== all apk files =="
-          find app/build/outputs -name '*.apk' -print || true
+          echo "== outputs/apk =="
+          ls -la app/build/outputs/apk || true
+          echo "== find app/build *.apk =="
+          find app/build -name '*.apk' -print || true
 
       - name: Collect APKs
         run: |
           mkdir -p artifacts
-          find app/build/outputs -name '*.apk' -print0 | xargs -0 -I{} cp -n {} artifacts/ || true
+          find app/build -name '*.apk' -print0 | xargs -0 -I{} cp -n {} artifacts/ || true
 
       - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
