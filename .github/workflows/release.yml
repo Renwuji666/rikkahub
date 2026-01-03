@@ -1,17 +1,12 @@
 name: Cloud Build
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       build:
-        description: "Build type"
+        description: "Build type (debug/release/both)"
         required: true
-        type: choice
         default: "release"
-        options:
-          - debug
-          - release
-          - both
 
 jobs:
   build:
