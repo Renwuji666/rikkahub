@@ -40,15 +40,17 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug -Pandroid.injected.build.abi=arm64-v8a
 
-      - name: List debug APK outputs
+      - name: List APK outputs
         run: |
+          echo "== debug dir =="
           ls -la app/build/outputs/apk/debug || true
-          find app/build/outputs/apk -name '*.apk' -maxdepth 3 -print || true
+          echo "== all apk files =="
+          find app/build/outputs -name '*.apk' -print || true
 
       - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/**/*.apk
           if-no-files-found: error
