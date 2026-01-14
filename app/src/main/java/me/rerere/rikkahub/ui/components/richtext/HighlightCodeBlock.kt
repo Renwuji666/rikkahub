@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.takeOrElse
 import androidx.navigation.NavHostController
 import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
@@ -85,10 +86,7 @@ fun HighlightCodeBlock(
     language: String,
     modifier: Modifier = Modifier,
     completeCodeBlock: Boolean = true,
-    style: TextStyle? = TextStyle(
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-    ),
+    style: TextStyle? = null,
 ) {
     val darkMode = LocalDarkMode.current
     val colorPalette = if (darkMode) AtomOneDarkPalette else AtomOneLightPalette
@@ -104,6 +102,8 @@ fun HighlightCodeBlock(
     }
     val autoWrap = settings.displaySetting.codeBlockAutoWrap
     val showLineNumbers = settings.displaySetting.showLineNumbers
+
+    val textStyle = LocalTextStyle.current.merge(style)
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
@@ -129,6 +129,7 @@ fun HighlightCodeBlock(
     ) {
         HighlightCodeActions(
             language = language,
+            textStyle = textStyle,
             scope = scope,
             clipboardManager = clipboardManager,
             code = code,
@@ -136,15 +137,11 @@ fun HighlightCodeBlock(
             navController = navController,
         )
         if (completeCodeBlock && language == "mermaid") {
-            Mermaid(
-                code = code,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Mermaid(code = code, modifier = Modifier.fillMaxWidth())
             return
         }
         Spacer(Modifier.height(8.dp))
 
-        val textStyle = LocalTextStyle.current.merge(style)
         val codeLines = remember(code) { code.lines() }
         val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
         val displayCode = if (isExpanded) code else collapsedCode
@@ -312,20 +309,23 @@ private fun CodeBlockDefault(
 @Composable
 private fun HighlightCodeActions(
     language: String,
+    textStyle: TextStyle,
     scope: CoroutineScope,
     clipboardManager: Clipboard,
     code: String,
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
     navController: NavHostController,
 ) {
+    val actionFontSize = textStyle.fontSize.takeOrElse { 12.sp } * 0.9f
+    val actionLineHeight = textStyle.lineHeight.takeOrElse { actionFontSize }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = language,
-            fontSize = 12.sp,
-            lineHeight = 12.sp,
+            fontSize = actionFontSize,
+            lineHeight = actionLineHeight,
             color = MaterialTheme.colorScheme.onSurfaceVariant
                 .copy(alpha = 0.5f),
         )
@@ -346,8 +346,8 @@ private fun HighlightCodeActions(
         ) {
             Text(
                 text = stringResource(id = R.string.chat_page_save),
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
+                fontSize = actionFontSize,
+                lineHeight = actionLineHeight,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.clickable {
                     val extension = when (language.lowercase()) {
@@ -378,8 +378,8 @@ private fun HighlightCodeActions(
 
             Text(
                 text = stringResource(id = R.string.code_block_copy),
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
+                fontSize = actionFontSize,
+                lineHeight = actionLineHeight,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.clickable {
                     scope.launch {
@@ -391,8 +391,8 @@ private fun HighlightCodeActions(
             if (language == "html") {
                 Text(
                     text = stringResource(id = R.string.code_block_preview),
-                    fontSize = 12.sp,
-                    lineHeight = 12.sp,
+                    fontSize = actionFontSize,
+                    lineHeight = actionLineHeight,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .clickable {
