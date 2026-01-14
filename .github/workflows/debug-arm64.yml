@@ -1,0 +1,61 @@
+name: Debug ARM64 Build
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Prepare google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          else
+            printf '%s\n' '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci","storage_bucket":"rikkahub-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"api_key":[{"current_key":"DUMMY_KEY"}]}],"configuration_version":"1"}' > app/google-services.json
+            echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build (debug package)."
+          fi
+
+      - name: Gradle Build (debug arm64)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug -Pandroid.injected.build.abi=arm64-v8a
+
+      - name: List APK outputs
+        run: |
+          echo "== outputs/apk =="
+          ls -la app/build/outputs/apk || true
+          echo "== find app/build *.apk =="
+          find app/build -name '*.apk' -print || true
+
+      - name: Collect APKs
+        run: |
+          mkdir -p artifacts
+          find app/build -name '*.apk' -print0 | xargs -0 -I{} cp -n {} artifacts/ || true
+
+      - name: Upload debug artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: debug-apk
+          path: artifacts/*.apk
+          if-no-files-found: error
