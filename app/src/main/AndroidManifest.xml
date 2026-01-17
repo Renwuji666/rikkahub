@@ -57,6 +57,9 @@
       android:name=".ui.activity.CapturePermissionActivity"
       android:exported="false"
       android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
+      android:noHistory="true"
+      android:excludeFromRecents="true"
+      android:finishOnTaskLaunch="true"
       android:configChanges="keyboardHidden|orientation|screenSize" />
 
     <activity

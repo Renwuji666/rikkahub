@@ -143,7 +143,7 @@ class MediaProjectionCaptureService : Service() {
         const val EXTRA_RESULT_DATA = "resultData"
 
         private const val NOTIFICATION_ID = 2002
-        private const val DELAY_BEFORE_CAPTURE_MS = 350L
+        private const val DELAY_BEFORE_CAPTURE_MS = 700L
 
         fun start(context: Context, resultCode: Int, data: Intent) {
             val intent = Intent(context, MediaProjectionCaptureService::class.java).apply {

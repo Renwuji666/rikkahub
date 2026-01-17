@@ -17,11 +17,14 @@ class CapturePermissionActivity : ComponentActivity() {
             // Start foreground capture service and immediately finish so user returns to previous app.
             MediaProjectionCaptureService.start(this, result.resultCode, data)
         }
+        moveTaskToBack(true)
         finish()
+        overridePendingTransition(0, 0)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        overridePendingTransition(0, 0)
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projectionLauncher.launch(manager.createScreenCaptureIntent())
     }
