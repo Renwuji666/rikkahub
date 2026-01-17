@@ -14,8 +14,8 @@ class CapturePermissionActivity : ComponentActivity() {
     ) { result ->
         val data = result.data
         if (result.resultCode == RESULT_OK && data != null) {
-            // Start foreground capture service and immediately finish so user returns to previous app.
-            MediaProjectionCaptureService.start(this, result.resultCode, data)
+            // Save projection for reuse; trigger one capture right after permission so user sees result.
+            MediaProjectionCaptureService.setProjection(this, result.resultCode, data, captureAfterSet = true)
         }
         moveTaskToBack(true)
         finish()

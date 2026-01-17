@@ -17,13 +17,19 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import me.rerere.rikkahub.FLOATING_BALL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.activity.CapturePermissionActivity
 import java.io.File
 
 class MediaProjectionCaptureService : Service() {
     private var mediaProjection: MediaProjection? = null
+    private var projectionResultCode: Int? = null
+    private var projectionResultData: Intent? = null
+
     private var imageReader: ImageReader? = null
     private var handlerThread: HandlerThread? = null
     private var handler: Handler? = null
+    private var isCapturing = false
+    private var isRequestingPermission = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -31,53 +37,84 @@ class MediaProjectionCaptureService : Service() {
         super.onCreate()
         handlerThread = HandlerThread("MediaProjectionCapture").also { it.start() }
         handler = Handler(handlerThread!!.looper)
+        startForegroundCompat(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_SET_PROJECTION -> {
+                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+                val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
+                if (resultCode != 0 && resultData != null) {
+                    saveProjection(resultCode, resultData)
+                    if (intent.getBooleanExtra(EXTRA_CAPTURE_AFTER_SET, false)) {
+                        requestCaptureInternal(DELAY_AFTER_PERMISSION_MS)
+                    }
+                }
+            }
+
+            ACTION_CAPTURE -> {
+                requestCaptureInternal(DELAY_DEFAULT_MS)
+            }
+
+            ACTION_WARMUP -> {
+                // Keep service alive; nothing else to do.
+            }
+
+            ACTION_STOP -> stopSelf()
         }
-
-        startForegroundCompat(NOTIFICATION_ID, buildNotification())
-
-        val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
-        val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
-        if (resultCode == 0 || resultData == null) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
-        startCapture(resultCode, resultData)
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
-    private fun startCapture(resultCode: Int, data: Intent) {
+    private fun saveProjection(resultCode: Int, data: Intent) {
+        projectionResultCode = resultCode
+        projectionResultData = data
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = manager.getMediaProjection(resultCode, data)
+        isRequestingPermission = false
+    }
 
+    private fun requestCaptureInternal(delayMs: Long) {
+        if (isCapturing) return
+
+        val projection = mediaProjection
+        if (projection == null) {
+            if (!isRequestingPermission) {
+                isRequestingPermission = true
+                // We don't have permission yet; request it once via a transparent activity.
+                val intent = Intent(this, CapturePermissionActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            }
+            return
+        }
+
+        isCapturing = true
+        handler?.postDelayed({ doCapture(projection) }, delayMs)
+    }
+
+    private fun doCapture(projection: MediaProjection) {
         val metrics = resources.displayMetrics
         val width = metrics.widthPixels
         val height = metrics.heightPixels
         val density = metrics.densityDpi
 
-        // Give system time to return to the previous app after the permission activity finishes.
-        handler?.postDelayed({
-            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-            imageReader = reader
+        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        imageReader = reader
 
-            val virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "RikkaHubCapture",
-                width,
-                height,
-                density,
-                0,
-                reader.surface,
-                null,
-                handler
-            )
+        val virtualDisplay = projection.createVirtualDisplay(
+            "RikkaHubCapture",
+            width,
+            height,
+            density,
+            0,
+            reader.surface,
+            null,
+            handler
+        )
 
-            reader.setOnImageAvailableListener({ r ->
+        reader.setOnImageAvailableListener({ r ->
             val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
             val planes = image.planes
             val buffer = planes[0].buffer
@@ -105,10 +142,10 @@ class MediaProjectionCaptureService : Service() {
 
             r.setOnImageAvailableListener(null, null)
             virtualDisplay?.release()
-            mediaProjection?.stop()
-            stopSelf()
+            imageReader?.close()
+            imageReader = null
+            isCapturing = false
         }, handler)
-        }, DELAY_BEFORE_CAPTURE_MS)
     }
 
     private fun buildNotification(): Notification {
@@ -136,25 +173,66 @@ class MediaProjectionCaptureService : Service() {
         handlerThread?.quitSafely()
         handlerThread = null
         handler = null
+        mediaProjection = null
+        projectionResultData = null
+        projectionResultCode = null
+        isRequestingPermission = false
     }
 
     companion object {
+        const val ACTION_CAPTURE = "me.rerere.rikkahub.action.CAPTURE"
+        const val ACTION_SET_PROJECTION = "me.rerere.rikkahub.action.SET_PROJECTION"
+        const val ACTION_STOP = "me.rerere.rikkahub.action.STOP_CAPTURE_SERVICE"
+        const val ACTION_WARMUP = "me.rerere.rikkahub.action.WARMUP"
+
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_RESULT_DATA = "resultData"
+        const val EXTRA_CAPTURE_AFTER_SET = "captureAfterSet"
 
         private const val NOTIFICATION_ID = 2002
-        private const val DELAY_BEFORE_CAPTURE_MS = 700L
+        private const val DELAY_AFTER_PERMISSION_MS = 700L
+        private const val DELAY_DEFAULT_MS = 200L
 
-        fun start(context: Context, resultCode: Int, data: Intent) {
+        fun requestCapture(context: Context) {
             val intent = Intent(context, MediaProjectionCaptureService::class.java).apply {
-                putExtra(EXTRA_RESULT_CODE, resultCode)
-                putExtra(EXTRA_RESULT_DATA, data)
+                action = ACTION_CAPTURE
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
+        }
+
+        fun warmup(context: Context) {
+            val intent = Intent(context, MediaProjectionCaptureService::class.java).apply {
+                action = ACTION_WARMUP
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun setProjection(context: Context, resultCode: Int, data: Intent, captureAfterSet: Boolean) {
+            val intent = Intent(context, MediaProjectionCaptureService::class.java).apply {
+                action = ACTION_SET_PROJECTION
+                putExtra(EXTRA_RESULT_CODE, resultCode)
+                putExtra(EXTRA_RESULT_DATA, data)
+                putExtra(EXTRA_CAPTURE_AFTER_SET, captureAfterSet)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, MediaProjectionCaptureService::class.java).apply {
+                action = ACTION_STOP
+            })
         }
     }
 }

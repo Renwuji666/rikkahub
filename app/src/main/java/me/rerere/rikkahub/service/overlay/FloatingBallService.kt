@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import me.rerere.rikkahub.FLOATING_BALL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
-import me.rerere.rikkahub.ui.activity.CapturePermissionActivity
+import me.rerere.rikkahub.service.capture.MediaProjectionCaptureService
 import kotlin.math.abs
 
 class FloatingBallService : Service() {
@@ -85,12 +85,8 @@ class FloatingBallService : Service() {
 
         view.setOnTouchListener(DragTouchListener(params))
         view.setOnClickListener {
-            val intent = Intent(this, CapturePermissionActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            }
-            startActivity(intent)
+            // Ask capture service to perform screenshot; it will request permission once if missing.
+            MediaProjectionCaptureService.requestCapture(this)
         }
 
         windowManager?.addView(view, params)
