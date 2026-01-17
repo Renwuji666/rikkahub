@@ -56,7 +56,7 @@
     <activity
       android:name=".ui.activity.CaptureSelectActivity"
       android:exported="false"
-      android:theme="@style/Theme.Rikkahub"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
       android:configChanges="keyboardHidden|orientation|screenSize" />
 
     <activity
