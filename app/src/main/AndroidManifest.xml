@@ -75,6 +75,11 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
+    <service
+      android:name=".service.capture.MediaProjectionCaptureService"
+      android:exported="false"
+      android:foregroundServiceType="mediaProjection" />
+
     <activity
       android:name="com.yalantis.ucrop.UCropActivity"
       android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>

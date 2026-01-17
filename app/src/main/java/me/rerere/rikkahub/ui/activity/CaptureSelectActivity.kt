@@ -1,23 +1,22 @@
 package me.rerere.rikkahub.ui.activity
 
 import androidx.activity.ComponentActivity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.graphics.PixelFormat
-import android.media.ImageReader
-import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.HandlerThread
 import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.setPadding
@@ -26,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.service.capture.MediaProjectionCaptureService
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.views.SelectionOverlayView
@@ -38,18 +38,30 @@ import kotlin.uuid.Uuid
 class CaptureSelectActivity : ComponentActivity() {
     private val chatService by inject<ChatService>()
 
-    private var mediaProjection: MediaProjection? = null
-    private var imageReader: ImageReader? = null
-    private var handlerThread: HandlerThread? = null
-    private var handler: Handler? = null
     private var capturedBitmap: Bitmap? = null
+    private var receiverRegistered = false
+
+    private val captureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != MediaProjectionCaptureService.ACTION_CAPTURED) return
+            val path = intent.getStringExtra(MediaProjectionCaptureService.EXTRA_IMAGE_PATH) ?: return
+            val bitmap = BitmapFactory.decodeFile(path)
+            if (bitmap == null) {
+                Toast.makeText(this@CaptureSelectActivity, "截图失败", Toast.LENGTH_SHORT).show()
+                finish()
+                return
+            }
+            capturedBitmap = bitmap
+            showSelectionUi(bitmap)
+        }
+    }
 
     private val projectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val data = result.data
         if (result.resultCode == RESULT_OK && data != null) {
-            startCapture(result.resultCode, data)
+            MediaProjectionCaptureService.start(this, result.resultCode, data)
         } else {
             finish()
         }
@@ -57,65 +69,29 @@ class CaptureSelectActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerCaptureReceiver()
+        setContentView(
+            FrameLayout(this).apply {
+                addView(
+                    TextView(this@CaptureSelectActivity).apply {
+                        text = "准备截图…"
+                        textSize = 18f
+                        setPadding(32)
+                    },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                    )
+                )
+            }
+        )
         requestCapturePermission()
     }
 
     private fun requestCapturePermission() {
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         projectionLauncher.launch(manager.createScreenCaptureIntent())
-    }
-
-    private fun startCapture(resultCode: Int, data: Intent) {
-        val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = manager.getMediaProjection(resultCode, data)
-
-        handlerThread = HandlerThread("CaptureThread").also { it.start() }
-        handler = Handler(handlerThread!!.looper)
-
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getRealMetrics(metrics)
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.densityDpi
-
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        val virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "RikkaHubCapture",
-            width,
-            height,
-            density,
-            0,
-            imageReader?.surface,
-            null,
-            handler
-        )
-
-        imageReader?.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-            val planes = image.planes
-            val buffer = planes[0].buffer
-            val pixelStride = planes[0].pixelStride
-            val rowStride = planes[0].rowStride
-            val rowPadding = rowStride - pixelStride * width
-            val bitmap = Bitmap.createBitmap(
-                width + rowPadding / pixelStride,
-                height,
-                Bitmap.Config.ARGB_8888
-            )
-            bitmap.copyPixelsFromBuffer(buffer)
-            val cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height)
-            image.close()
-
-            runOnUiThread {
-                capturedBitmap = cropped
-                showSelectionUi(cropped)
-            }
-
-            reader.setOnImageAvailableListener(null, null)
-            virtualDisplay?.release()
-            mediaProjection?.stop()
-        }, handler)
     }
 
     private fun showSelectionUi(bitmap: Bitmap) {
@@ -218,12 +194,26 @@ class CaptureSelectActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        imageReader?.close()
-        mediaProjection?.stop()
-        handlerThread?.quitSafely()
-        handlerThread = null
-        handler = null
+        unregisterCaptureReceiver()
         capturedBitmap?.recycle()
         capturedBitmap = null
+    }
+
+    private fun registerCaptureReceiver() {
+        if (receiverRegistered) return
+        val filter = IntentFilter(MediaProjectionCaptureService.ACTION_CAPTURED)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(captureReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(captureReceiver, filter)
+        }
+        receiverRegistered = true
+    }
+
+    private fun unregisterCaptureReceiver() {
+        if (!receiverRegistered) return
+        unregisterReceiver(captureReceiver)
+        receiverRegistered = false
     }
 }
