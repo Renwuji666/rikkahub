@@ -14,11 +14,14 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.util.DisplayMetrics
 import androidx.core.app.NotificationCompat
 import me.rerere.rikkahub.FLOATING_BALL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.activity.CapturePermissionActivity
 import java.io.File
+import android.hardware.display.VirtualDisplay
+import android.hardware.display.DisplayManager
 
 class MediaProjectionCaptureService : Service() {
     private var mediaProjection: MediaProjection? = null
@@ -26,10 +29,12 @@ class MediaProjectionCaptureService : Service() {
     private var projectionResultData: Intent? = null
 
     private var imageReader: ImageReader? = null
+    private var virtualDisplay: VirtualDisplay? = null
     private var handlerThread: HandlerThread? = null
     private var handler: Handler? = null
     private var isCapturing = false
     private var isRequestingPermission = false
+    private var capturePending = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,8 +75,20 @@ class MediaProjectionCaptureService : Service() {
         projectionResultCode = resultCode
         projectionResultData = data
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = manager.getMediaProjection(resultCode, data)
+        mediaProjection = manager.getMediaProjection(resultCode, data)?.also { projection ->
+            projection.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    handler?.post {
+                        teardownVirtualDisplay()
+                        mediaProjection = null
+                        isCapturing = false
+                        capturePending = false
+                    }
+                }
+            }, handler)
+        }
         isRequestingPermission = false
+        ensureVirtualDisplay()
     }
 
     private fun requestCaptureInternal(delayMs: Long) {
@@ -91,31 +108,48 @@ class MediaProjectionCaptureService : Service() {
         }
 
         isCapturing = true
-        handler?.postDelayed({ doCapture(projection) }, delayMs)
+        handler?.postDelayed({
+            ensureVirtualDisplay()
+            capturePending = true
+            // Safety timeout to avoid stuck capturing if no frame arrives.
+            handler?.postDelayed({
+                if (capturePending) {
+                    capturePending = false
+                    isCapturing = false
+                }
+            }, CAPTURE_TIMEOUT_MS)
+        }, delayMs)
     }
 
-    private fun doCapture(projection: MediaProjection) {
-        val metrics = resources.displayMetrics
+    private fun ensureVirtualDisplay() {
+        if (virtualDisplay != null && imageReader != null) return
+        val projection = mediaProjection ?: return
+
+        val metrics: DisplayMetrics = resources.displayMetrics
         val width = metrics.widthPixels
         val height = metrics.heightPixels
         val density = metrics.densityDpi
 
         val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
         imageReader = reader
-
-        val virtualDisplay = projection.createVirtualDisplay(
+        virtualDisplay = projection.createVirtualDisplay(
             "RikkaHubCapture",
             width,
             height,
             density,
-            0,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             reader.surface,
             null,
             handler
         )
 
         reader.setOnImageAvailableListener({ r ->
-            val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+            val image = r.acquireLatestImage()
+            if (image == null) return@setOnImageAvailableListener
+            if (!capturePending) {
+                image.close()
+                return@setOnImageAvailableListener
+            }
             val planes = image.planes
             val buffer = planes[0].buffer
             val pixelStride = planes[0].pixelStride
@@ -140,12 +174,17 @@ class MediaProjectionCaptureService : Service() {
             cropped.recycle()
             bitmap.recycle()
 
-            r.setOnImageAvailableListener(null, null)
-            virtualDisplay?.release()
-            imageReader?.close()
-            imageReader = null
+            capturePending = false
             isCapturing = false
         }, handler)
+    }
+
+    private fun teardownVirtualDisplay() {
+        imageReader?.setOnImageAvailableListener(null, null)
+        imageReader?.close()
+        imageReader = null
+        virtualDisplay?.release()
+        virtualDisplay = null
     }
 
     private fun buildNotification(): Notification {
@@ -168,11 +207,11 @@ class MediaProjectionCaptureService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        imageReader?.close()
         mediaProjection?.stop()
         handlerThread?.quitSafely()
         handlerThread = null
         handler = null
+        teardownVirtualDisplay()
         mediaProjection = null
         projectionResultData = null
         projectionResultCode = null
@@ -192,6 +231,7 @@ class MediaProjectionCaptureService : Service() {
         private const val NOTIFICATION_ID = 2002
         private const val DELAY_AFTER_PERMISSION_MS = 700L
         private const val DELAY_DEFAULT_MS = 200L
+        private const val CAPTURE_TIMEOUT_MS = 1500L
 
         fun requestCapture(context: Context) {
             val intent = Intent(context, MediaProjectionCaptureService::class.java).apply {
