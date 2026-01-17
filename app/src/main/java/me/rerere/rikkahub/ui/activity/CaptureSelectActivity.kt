@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.ui.activity
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -35,7 +35,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.uuid.Uuid
 
-class CaptureSelectActivity : Activity() {
+class CaptureSelectActivity : ComponentActivity() {
     private val chatService by inject<ChatService>()
 
     private var mediaProjection: MediaProjection? = null
