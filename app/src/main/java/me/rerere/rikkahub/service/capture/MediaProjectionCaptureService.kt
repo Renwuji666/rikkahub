@@ -61,21 +61,23 @@ class MediaProjectionCaptureService : Service() {
         val height = metrics.heightPixels
         val density = metrics.densityDpi
 
-        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        imageReader = reader
+        // Give system time to return to the previous app after the permission activity finishes.
+        handler?.postDelayed({
+            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            imageReader = reader
 
-        val virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "RikkaHubCapture",
-            width,
-            height,
-            density,
-            0,
-            reader.surface,
-            null,
-            handler
-        )
+            val virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "RikkaHubCapture",
+                width,
+                height,
+                density,
+                0,
+                reader.surface,
+                null,
+                handler
+            )
 
-        reader.setOnImageAvailableListener({ r ->
+            reader.setOnImageAvailableListener({ r ->
             val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
             val planes = image.planes
             val buffer = planes[0].buffer
@@ -96,12 +98,7 @@ class MediaProjectionCaptureService : Service() {
                 cropped.compress(Bitmap.CompressFormat.PNG, 100, os)
             }
 
-            sendBroadcast(
-                Intent(ACTION_CAPTURED).apply {
-                    setPackage(packageName)
-                    putExtra(EXTRA_IMAGE_PATH, file.absolutePath)
-                }
-            )
+            CaptureOverlayService.start(this, file.absolutePath)
 
             cropped.recycle()
             bitmap.recycle()
@@ -111,6 +108,7 @@ class MediaProjectionCaptureService : Service() {
             mediaProjection?.stop()
             stopSelf()
         }, handler)
+        }, DELAY_BEFORE_CAPTURE_MS)
     }
 
     private fun buildNotification(): Notification {
@@ -141,12 +139,11 @@ class MediaProjectionCaptureService : Service() {
     }
 
     companion object {
-        const val ACTION_CAPTURED = "me.rerere.rikkahub.action.CAPTURED"
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_RESULT_DATA = "resultData"
-        const val EXTRA_IMAGE_PATH = "imagePath"
 
         private const val NOTIFICATION_ID = 2002
+        private const val DELAY_BEFORE_CAPTURE_MS = 350L
 
         fun start(context: Context, resultCode: Int, data: Intent) {
             val intent = Intent(context, MediaProjectionCaptureService::class.java).apply {

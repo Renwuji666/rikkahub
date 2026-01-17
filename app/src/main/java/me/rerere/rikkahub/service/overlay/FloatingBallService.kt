@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import me.rerere.rikkahub.FLOATING_BALL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
-import me.rerere.rikkahub.ui.activity.CaptureSelectActivity
+import me.rerere.rikkahub.ui.activity.CapturePermissionActivity
 import kotlin.math.abs
 
 class FloatingBallService : Service() {
@@ -85,7 +85,7 @@ class FloatingBallService : Service() {
 
         view.setOnTouchListener(DragTouchListener(params))
         view.setOnClickListener {
-            val intent = Intent(this, CaptureSelectActivity::class.java).apply {
+            val intent = Intent(this, CapturePermissionActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)

@@ -54,7 +54,7 @@
           android:resource="@xml/shortcuts" />
     </activity>
     <activity
-      android:name=".ui.activity.CaptureSelectActivity"
+      android:name=".ui.activity.CapturePermissionActivity"
       android:exported="false"
       android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
       android:configChanges="keyboardHidden|orientation|screenSize" />
@@ -79,6 +79,10 @@
       android:name=".service.capture.MediaProjectionCaptureService"
       android:exported="false"
       android:foregroundServiceType="mediaProjection" />
+
+    <service
+      android:name=".service.capture.CaptureOverlayService"
+      android:exported="false" />
 
     <activity
       android:name="com.yalantis.ucrop.UCropActivity"
