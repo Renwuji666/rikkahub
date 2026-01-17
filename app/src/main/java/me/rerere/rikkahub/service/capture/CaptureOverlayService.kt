@@ -223,7 +223,6 @@ class CaptureOverlayService : Service() {
         rootView = null
         screenshotImageView = null
         selectionView = null
-        screenshotBitmap?.recycle()
         screenshotBitmap = null
     }
 
