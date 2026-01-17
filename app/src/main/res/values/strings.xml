@@ -310,6 +310,11 @@
   <string name="more_options">More options</string>
   <string name="no_text_content_to_copy">No text content available to copy</string>
   <string name="notification_channel_chat_completed">Chat Completed</string>
+  <string name="notification_channel_floating_ball">Floating Ball</string>
+  <string name="notification_floating_ball_title">Floating Ball Running</string>
+  <string name="notification_floating_ball_text">Tap the ball to capture and send</string>
+  <string name="setting_page_floating_ball_title">Floating Ball Capture</string>
+  <string name="setting_page_floating_ball_desc">Tap to capture a region and send to current chat</string>
   <string name="notification_chat_done_title">Chat Message Generated</string>
   <string name="permission_camera">Camera</string>
   <string name="permission_camera_desc">Camera permission is required to take photos</string>
@@ -729,4 +734,3 @@
   <string name="backup_page_s3_backup_files">S3 Backup Files</string>
   <string name="backup_page_s3_backup">S3 Backup</string>
 </resources>
-

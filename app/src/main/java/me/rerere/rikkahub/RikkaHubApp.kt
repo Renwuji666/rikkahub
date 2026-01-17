@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
+import android.provider.Settings
+import me.rerere.rikkahub.service.overlay.FloatingBallService
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.remoteConfigSettings
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -29,6 +31,7 @@ import org.koin.core.context.startKoin
 private const val TAG = "RikkaHubApp"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
+const val FLOATING_BALL_NOTIFICATION_CHANNEL_ID = "floating_ball"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -58,6 +61,8 @@ class RikkaHubApp : Application() {
 
         // https://issuetracker.google.com/issues/469669851
         ComposeFoundationFlags.isPausableCompositionInPrefetchEnabled = false
+
+        maybeStartFloatingBall()
     }
 
     private fun deleteTempFiles() {
@@ -80,6 +85,24 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(true)
             .build()
         notificationManager.createNotificationChannel(chatCompletedChannel)
+
+        val floatingBallChannel = NotificationChannelCompat
+            .Builder(
+                FLOATING_BALL_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_LOW
+            )
+            .setName(getString(R.string.notification_channel_floating_ball))
+            .setVibrationEnabled(false)
+            .build()
+        notificationManager.createNotificationChannel(floatingBallChannel)
+    }
+
+    private fun maybeStartFloatingBall() {
+        val prefs = getSharedPreferences("rikkahub.preferences", MODE_PRIVATE)
+        val enabled = prefs.getBoolean("floating_ball_enabled", false)
+        if (enabled && Settings.canDrawOverlays(this)) {
+            FloatingBallService.start(this)
+        }
     }
 
     override fun onTerminate() {

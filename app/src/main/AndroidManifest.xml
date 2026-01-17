@@ -5,6 +5,9 @@
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
   <uses-feature
     android:name="android.hardware.camera"
@@ -50,6 +53,11 @@
           android:name="android.app.shortcuts"
           android:resource="@xml/shortcuts" />
     </activity>
+    <activity
+      android:name=".ui.activity.CaptureSelectActivity"
+      android:exported="false"
+      android:theme="@style/Theme.Rikkahub"
+      android:configChanges="keyboardHidden|orientation|screenSize" />
 
     <activity
         android:name=".ui.activity.ShortcutHandlerActivity"
@@ -61,6 +69,11 @@
             <data android:scheme="rikkahub" android:host="shortcut" />
         </intent-filter>
     </activity>
+
+    <service
+      android:name=".service.overlay.FloatingBallService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
 
     <activity
       android:name="com.yalantis.ucrop.UCropActivity"

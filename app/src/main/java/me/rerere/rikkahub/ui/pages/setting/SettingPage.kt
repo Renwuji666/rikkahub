@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,6 +70,10 @@ import me.rerere.rikkahub.ui.theme.ColorMode
 import me.rerere.rikkahub.utils.countChatFiles
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.service.overlay.FloatingBallService
+import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -163,6 +169,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     icon = { Icon(Lucide.Monitor, "Display Setting") },
                     link = Screen.SettingDisplay
                 )
+            }
+
+            item("floatingBall") {
+                FloatingBallToggleItem()
             }
 
             item {
@@ -374,6 +384,51 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             }
         }
     }
+}
+
+@Composable
+private fun FloatingBallToggleItem() {
+    val context = LocalContext.current
+    var enabled by rememberSharedPreferenceBoolean("floating_ball_enabled", false)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val granted = Settings.canDrawOverlays(context)
+        enabled = granted
+        if (granted) {
+            FloatingBallService.start(context)
+        } else {
+            FloatingBallService.stop(context)
+        }
+    }
+
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.setting_page_floating_ball_title)) },
+        supportingContent = { Text(stringResource(R.string.setting_page_floating_ball_desc)) },
+        leadingContent = { Icon(Lucide.Share2, null) },
+        trailingContent = {
+            Switch(
+                checked = enabled,
+                onCheckedChange = { checked ->
+                    if (checked) {
+                        if (Settings.canDrawOverlays(context)) {
+                            enabled = true
+                            FloatingBallService.start(context)
+                        } else {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            permissionLauncher.launch(intent)
+                        }
+                    } else {
+                        enabled = false
+                        FloatingBallService.stop(context)
+                    }
+                }
+            )
+        }
+    )
 }
 
 @Composable
