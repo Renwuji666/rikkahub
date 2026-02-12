@@ -30,11 +30,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
@@ -45,6 +48,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.truncate
+import me.rerere.ai.util.encodeBase64
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
@@ -420,7 +424,12 @@ class ChatService(
                                 description = tool.description ?: "",
                                 parameters = { tool.inputSchema },
                                 execute = {
-                                    mcpManager.callTool(tool.name, it.jsonObject)
+                                    val fixedArgs = normalizeMcpImageArgs(
+                                        toolName = tool.name,
+                                        rawArgs = it.jsonObject,
+                                        conversation = getConversationFlow(conversationId).value
+                                    )
+                                    mcpManager.callTool(tool.name, fixedArgs)
                                 },
                             )
                         )
@@ -468,6 +477,58 @@ class ChatService(
             }.invokeOnCompletion {
                 removeConversationReference(conversationId) // 移除引用
             }
+        }
+    }
+
+    private fun normalizeMcpImageArgs(
+        toolName: String,
+        rawArgs: JsonObject,
+        conversation: Conversation,
+    ): JsonObject {
+        if (toolName != "edit_image" && toolName != "image_variation") return rawArgs
+
+        val imagePath = rawArgs["image_path"]?.jsonPrimitive?.contentOrNull
+        val maskPath = rawArgs["mask_path"]?.jsonPrimitive?.contentOrNull
+
+        val placeholderRegex = Regex("^input_file_\\d+\\.[A-Za-z0-9]+$")
+        val needsImageReplace = !imagePath.isNullOrBlank() && placeholderRegex.matches(imagePath)
+        val needsMaskReplace = !maskPath.isNullOrBlank() && placeholderRegex.matches(maskPath)
+
+        if (!needsImageReplace && !needsMaskReplace) return rawArgs
+
+        val recentImages = conversation.currentMessages
+            .asReversed()
+            .flatMap { it.parts }
+            .filterIsInstance<UIMessagePart.Image>()
+            .filter { it.url.startsWith("file://") || it.url.startsWith("data:") }
+
+        if (recentImages.isEmpty()) return rawArgs
+
+        val imageBase64 = recentImages.firstOrNull()?.encodeBase64(withPrefix = true)?.getOrNull()?.base64
+        if (imageBase64.isNullOrBlank()) return rawArgs
+
+        val maskBase64 = if (needsMaskReplace && recentImages.size > 1) {
+            recentImages[1].encodeBase64(withPrefix = true).getOrNull()?.base64
+        } else {
+            null
+        }
+
+        val fixed = linkedMapOf<String, JsonElement>()
+        rawArgs.forEach { (key, value) ->
+            when (key) {
+                "image_path" -> if (!needsImageReplace) fixed[key] = value
+                "mask_path" -> if (!needsMaskReplace) fixed[key] = value
+                else -> fixed[key] = value
+            }
+        }
+
+        fixed["image_base64"] = JsonPrimitive(imageBase64)
+        if (!maskBase64.isNullOrBlank()) {
+            fixed["mask_base64"] = JsonPrimitive(maskBase64)
+        }
+
+        return buildJsonObject {
+            fixed.forEach { (key, value) -> put(key, value) }
         }
     }
 
