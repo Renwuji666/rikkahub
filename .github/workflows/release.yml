@@ -1,5 +1,6 @@
 name: Cloud Build
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -33,43 +34,6 @@ jobs:
           # google-services.json (use secret if provided, else dummy for CI)
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-            python3 - <<'PY'
-import copy
-import json
-from pathlib import Path
-
-path = Path("app/google-services.json")
-try:
-    data = json.loads(path.read_text(encoding="utf-8"))
-except Exception:
-    raise SystemExit("Invalid GOOGLE_SERVICES_JSON")
-
-clients = data.get("client") or []
-if not isinstance(clients, list):
-    clients = []
-
-def package_name(client):
-    return (
-        client.get("client_info", {})
-        .get("android_client_info", {})
-        .get("package_name")
-    )
-
-names = {package_name(client) for client in clients}
-if "me.rerere.rikkahub.debug" not in names:
-    release_client = next(
-        (client for client in clients if package_name(client) == "me.rerere.rikkahub"),
-        clients[0] if clients else None,
-    )
-    if release_client is not None:
-        debug_client = copy.deepcopy(release_client)
-        debug_client.setdefault("client_info", {}).setdefault("android_client_info", {})[
-            "package_name"
-        ] = "me.rerere.rikkahub.debug"
-        clients.append(debug_client)
-        data["client"] = clients
-        path.write_text(json.dumps(data), encoding="utf-8")
-PY
           else
             printf '%s\n' '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci","storage_bucket":"rikkahub-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub"}},"api_key":[{"current_key":"DUMMY_KEY"}]},{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000001","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"api_key":[{"current_key":"DUMMY_KEY"}]}],"configuration_version":"1"}' > app/google-services.json
             echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build."
@@ -117,7 +81,8 @@ PY
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease
+          ./gradlew assembleDebug -x :app:processDebugGoogleServices
+          ./gradlew assembleRelease
 
       - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
