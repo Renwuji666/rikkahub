@@ -486,6 +486,11 @@ class ChatService(
     ): JsonObject {
         if (toolName != "edit_image" && toolName != "image_variation") return rawArgs
 
+        val imageBase64InArgs = (rawArgs["image_base64"] as? JsonPrimitive)
+            ?.content
+            ?.takeUnless { it.isBlank() || it == "null" }
+        if (!imageBase64InArgs.isNullOrBlank()) return rawArgs
+
         val imagePath = (rawArgs["image_path"] as? JsonPrimitive)
             ?.content
             ?.takeUnless { it == "null" }
@@ -497,7 +502,8 @@ class ChatService(
         val needsImageReplace = !imagePath.isNullOrBlank() && placeholderRegex.matches(imagePath)
         val needsMaskReplace = !maskPath.isNullOrBlank() && placeholderRegex.matches(maskPath)
 
-        if (!needsImageReplace && !needsMaskReplace) return rawArgs
+        val hasImageInput = !imagePath.isNullOrBlank()
+        if (!needsImageReplace && !needsMaskReplace && hasImageInput) return rawArgs
 
         val recentImages = conversation.currentMessages
             .asReversed()
@@ -519,7 +525,7 @@ class ChatService(
         val fixed = linkedMapOf<String, JsonElement>()
         rawArgs.forEach { (key, value) ->
             when (key) {
-                "image_path" -> if (!needsImageReplace) fixed[key] = value
+                "image_path" -> if (!needsImageReplace && hasImageInput) fixed[key] = value
                 "mask_path" -> if (!needsMaskReplace) fixed[key] = value
                 else -> fixed[key] = value
             }
