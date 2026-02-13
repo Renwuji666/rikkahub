@@ -37,7 +37,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
@@ -487,8 +486,12 @@ class ChatService(
     ): JsonObject {
         if (toolName != "edit_image" && toolName != "image_variation") return rawArgs
 
-        val imagePath = rawArgs["image_path"]?.jsonPrimitive?.contentOrNull
-        val maskPath = rawArgs["mask_path"]?.jsonPrimitive?.contentOrNull
+        val imagePath = (rawArgs["image_path"] as? JsonPrimitive)
+            ?.content
+            ?.takeUnless { it == "null" }
+        val maskPath = (rawArgs["mask_path"] as? JsonPrimitive)
+            ?.content
+            ?.takeUnless { it == "null" }
 
         val placeholderRegex = Regex("^input_file_\\d+\\.[A-Za-z0-9]+$")
         val needsImageReplace = !imagePath.isNullOrBlank() && placeholderRegex.matches(imagePath)
