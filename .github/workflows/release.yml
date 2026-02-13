@@ -80,11 +80,18 @@ jobs:
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug assembleRelease
 
-      - name: Upload artifacts
+      - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: artifacts
+          name: artifacts-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: artifacts-release
           path: app/build/outputs/apk/release/*.apk
