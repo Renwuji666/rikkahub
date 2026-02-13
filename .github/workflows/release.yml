@@ -34,6 +34,10 @@ jobs:
           # google-services.json (use secret if provided, else dummy for CI)
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            if ! grep -q '"package_name":"me.rerere.rikkahub.debug"' app/google-services.json; then
+              echo "::warning::GOOGLE_SERVICES_JSON has no debug client; replacing with CI dummy config for debug build compatibility."
+              printf '%s\n' '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci","storage_bucket":"rikkahub-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub"}},"api_key":[{"current_key":"DUMMY_KEY"}]},{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000001","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"api_key":[{"current_key":"DUMMY_KEY"}]}],"configuration_version":"1"}' > app/google-services.json
+            fi
           else
             printf '%s\n' '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci","storage_bucket":"rikkahub-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub"}},"api_key":[{"current_key":"DUMMY_KEY"}]},{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000001","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"api_key":[{"current_key":"DUMMY_KEY"}]}],"configuration_version":"1"}' > app/google-services.json
             echo "::warning::GOOGLE_SERVICES_JSON not set; using dummy firebase config for CI build."
@@ -81,8 +85,7 @@ jobs:
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug -x :app:processDebugGoogleServices
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug assembleRelease
 
       - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
